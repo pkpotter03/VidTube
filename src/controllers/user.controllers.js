@@ -3,7 +3,13 @@ import { ApiError } from "../utils/ApiError.js"
 import { User } from "../models/user.models.js"
 import { uploadOnCloudinary, deleteFromCloudinary } from "../utils/cloudinary.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
+import mongoose, { Schema } from "mongoose"
 import jwt from "jsonwebtoken"
+import dotenv from "dotenv"
+
+dotenv.config({
+    path: "src/.env"
+})
 
 const generateAccessAndRefreshToken = async (userId) => {
     try {
@@ -17,6 +23,7 @@ const generateAccessAndRefreshToken = async (userId) => {
         await user.save({ validateBeforeSave: false })
         return { accessToken, refreshToken }
     } catch (error) {
+        console.error("Token Generation Error:", error);
         throw new ApiError(500, "Something is happen while generating access and refresh tokens")
     }
 
@@ -29,7 +36,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     }
 
     try {
-        const decodedToken = jwt.verify(incomingRefreshToken, process.env, REFRESH_TOKEN_SECRE,)
+        const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET,)
         const user = await User.findById(decodedToken?._id)
         if (!user) {
             throw new ApiError(401, "Invalid Refersh Token")
@@ -179,7 +186,7 @@ const loginUser = asyncHandler(async (req, res) => {
 })
 
 const logoutUser = asyncHandler(async (req, res) => {
-    await User.findByIdAndUpdate(
+   const user = await User.findByIdAndUpdate(
         req.user._id,
         {
             $set: {
@@ -196,10 +203,10 @@ const logoutUser = asyncHandler(async (req, res) => {
     }
 
     return res
-        .staus(200)
+        .status(200)
         .clearCookie("accessToken", options)
         .clearCookie("refreshToken", options)
-        .json(new ApiResponse(200, {}, "User Logged Out Successfully"))
+        .json(new ApiResponse(200, {username: user.username}, "User Logged Out Successfully"))
 })
 
 const changeCurrentPassword = asyncHandler(async (req, res) => {
@@ -235,8 +242,8 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
 
     const user = await User.findByIdAndUpdate(req.user?._id, {
         $set: {
-            fullname,
-            email: email
+            fullname: fullname,
+            email: email,
         }
     }).select("-password -refreshToken")
 
@@ -252,7 +259,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     }
 
     const avatar = await uploadOnCloudinary(avatarLocalPath)
-    if(avatar.url){
+    if(!avatar.url){
         throw new ApiError(500, "Somthing went Wrong while uploading avatar")
     }
 
@@ -278,7 +285,7 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
     }
 
     const coverImage = await uploadOnCloudinary(coverLocalPath)
-    if(coverImage.url){
+    if(!coverImage.url){
         throw new ApiError(500, "Somthing went Wrong while uploading Cover Image")
     }
 
@@ -326,7 +333,7 @@ const getUserChannelProfile = asyncHandler( async (req, res) => {
             }
         },
         {
-            $addFiels: {
+            $addFields: {
                 subscribersCount: {
                     $size: "$subscribers"
                 },
@@ -376,7 +383,7 @@ const getWatchHistory = asyncHandler( async (req, res) => {
     const user = await User.aggregate([
         {
             $match: {
-                _id: new mongoose.Type.ObjectId(req.user?._id)
+                _id: new mongoose.Types.ObjectId(req.user?._id)
             }
         },
         {
